@@ -99,7 +99,7 @@ const handler = async (event, context) => {
     const response = await transporter.sendMail({
       from: process.env.EMAIL,
       to: body.email || process.env.EMAIL,
-      subject: `Elite cards files`,
+      subject: `uCard Elite New Order`,
       attachments: [
         { filename: "card-front.svg", content: front },
         { filename: "card-back.svg", content: back },
