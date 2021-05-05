@@ -1,4 +1,4 @@
-module.exports = (props, receiver) => `<!DOCTYPE html>
+module.exports = (props) => `<!DOCTYPE html>
 <html>
   <head>
     <meta name="viewport" content="width=device-width" />
@@ -352,19 +352,14 @@ module.exports = (props, receiver) => `<!DOCTYPE html>
                     <tr>
                       <td>
                         <p>Hi there,</p>
-                        <p>${
-                          receiver === "admin"
-                            ? `You got the order from ${props.name_first} ${props.name_last}. Cards
-                          mockups are attached to this email.`
-                            : "Thank you for the order!"
-                        }
+                        <p>
+                          You got the order from ${props.name_first} ${props.name_last}. Cards
+                          mockups are attached to this email.
                         </p>
                         <label>Address</label>
                         <p>${props.address}, ${props.city}, ${props.state}</p>
                         <label>Email</label>
                         <p>${props.email_address}</p>
-                        <label>Shipping</label>
-                        <p>${props.shipping}</p>
                       </td>
                     </tr>
                   </table>

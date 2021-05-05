@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 const TextToSVG = require("text-to-svg");
 const fs = require("fs");
+const fetch = require("node-fetch");
 
 const readSvg = (fileName) => {
   return new Promise((resolve, reject) => {
@@ -12,24 +13,66 @@ const readSvg = (fileName) => {
 
 const svgCardTemplate = async ({
   provider = "visa",
-  numberOnFront = true,
+  numberPosition,
   name,
   logoText,
+  logoTextX,
+  logoTextY,
   logoTextSize,
+  logo,
+  logoX,
+  logoY,
+  border,
 }) => {
   const options = { x: 0, y: 0, fontSize: 4.79, anchor: "top", attributes: { fill: "black" } };
-
+  const scale = 5.557;
   const textToSVG = TextToSVG.loadSync(require.resolve("./Oswald-Regular.ttf"));
   const namePath = textToSVG.getPath(name, options);
   const fontSize = logoTextSize * 0.19;
   const customTextPath = textToSVG.getPath(logoText, { ...options, fontSize });
   const cardBackNoNumber = await readSvg("./card-back-withoutNR.svg");
   const cardBackWithNumber = await readSvg("./card-back-withNR.svg");
+  const borderVectorized = border
+    ? await fetch(`https://boiling-depths-34589.herokuapp.com/imageToSvg`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: border, color: 0 }),
+      }).then((x) => x.json())
+    : null;
+  let borderSvg;
+
+  if (borderVectorized) {
+    borderSvg = borderVectorized.svg;
+    borderSvg = borderSvg.replace(/width=\"(.*?)\"/, `width="83.6"`);
+    borderSvg = borderSvg.replace(/height=\"(.*?)\"/, `height="51.98"`);
+    borderSvg = borderSvg.replace(
+      "<svg",
+      `<svg preserveAspectRatio="none" viewBox="0 0 ${borderVectorized.width} ${borderVectorized.height}"`
+    );
+  }
 
   return {
     front: `<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" width="85.6mm" height="53.98mm" viewBox="0 0 85.6 53.98" fill="white">
   <rect x="0" y="0" width="85.6" height="53.98" stroke="black" stroke-width="0.3" rx="3.5"></rect>
-  <g id="logoText" transform="translate(2,2)">${customTextPath}</g>
+  ${
+    customTextPath
+      ? `<g id="logoText" transform="translate(${logoTextX / scale},${logoTextY / scale})">
+        ${customTextPath}
+      </g>`
+      : null
+  }
+
+  ${
+    logo
+      ? `<g
+        transform="translate(${logoX / scale}, ${logoY / scale})"
+      >
+        ${logo}
+      </g>`
+      : null
+  }
+
+  ${borderSvg ? `<g id="border" transform="translate(1, 1)">${borderSvg}</g>` : null}
   <g id="lust" transform="translate(8,14)">
       <path d="M11.3059 0.186279H1.93797C1.37339 0.186279 0.91571 0.667514 0.91571 1.26115V6.96913C0.91571 7.56277 1.37339 8.044 1.93797 8.044H11.3059C11.8704 8.044 12.3281 7.56277 12.3281 6.96913V1.26115C12.3281 0.667514 11.8704 0.186279 11.3059 0.186279Z" stroke="black" stroke-width="0.165"/>
   </g>
@@ -57,7 +100,7 @@ const svgCardTemplate = async ({
   }
 
   ${
-    numberOnFront
+    numberPosition === "front"
       ? `<g id="number" transform="translate(27.8, 25)">
   <path d="M1.1297 0.891512H0.203573V0.53301H1.58637V0.75494L0.946184 3.98999H0.506593L1.1297 0.891512ZM2.776 0.891512H1.84987V0.53301H3.23267V0.75494L2.59248 3.98999H2.15289L2.776 0.891512ZM4.4223 0.891512H3.49617V0.53301H4.87897V0.75494L4.23878 3.98999H3.79919L4.4223 0.891512ZM6.0686 0.891512H5.14247V0.53301H6.52526V0.75494L5.88508 3.98999H5.44549L6.0686 0.891512ZM8.69018 0.891512H7.76405V0.53301H9.14684V0.75494L8.50666 3.98999H8.06707L8.69018 0.891512ZM10.3365 0.891512H9.41035V0.53301H10.7931V0.75494L10.153 3.98999H9.71337L10.3365 0.891512ZM11.9828 0.891512H11.0566V0.53301H12.4394V0.75494L11.7993 3.98999H11.3597L11.9828 0.891512ZM13.6291 0.891512H12.7029V0.53301H14.0857V0.75494L13.4456 3.98999H13.006L13.6291 0.891512ZM16.2507 0.891512H15.3245V0.53301H16.7073V0.75494L16.0671 3.98999H15.6275L16.2507 0.891512ZM17.897 0.891512H16.9708V0.53301H18.3536V0.75494L17.7134 3.98999H17.2738L17.897 0.891512ZM19.5433 0.891512H18.6171V0.53301H19.9999V0.75494L19.3597 3.98999H18.9201L19.5433 0.891512ZM21.1896 0.891512H20.2634V0.53301H21.6462V0.75494L21.006 3.98999H20.5664L21.1896 0.891512ZM23.8111 0.891512H22.885V0.53301H24.2678V0.75494L23.6276 3.98999H23.188L23.8111 0.891512ZM25.4574 0.891512H24.5313V0.53301H25.9141V0.75494L25.2739 3.98999H24.8343L25.4574 0.891512ZM27.1037 0.891512H26.1776V0.53301H27.5604V0.75494L26.9202 3.98999H26.4806L27.1037 0.891512ZM28.75 0.891512H27.8239V0.53301H29.2067V0.75494L28.5665 3.98999H28.1269L28.75 0.891512Z" fill="#282828"/>
 </g>
@@ -67,7 +110,12 @@ const svgCardTemplate = async ({
       : ""
   }
 </svg>`,
-    back: numberOnFront ? cardBackNoNumber : cardBackWithNumber,
+    back:
+      numberPosition === "front"
+        ? cardBackNoNumber
+        : numberPosition === "back"
+        ? cardBackWithNumber
+        : cardBackNoNumber,
   };
 };
 
@@ -90,16 +138,22 @@ const handler = async (event, context) => {
 
     const { front, back } = await svgCardTemplate({
       provider: body.provider || "visa",
-      numberOnFront: typeof body.numberOnFront === "boolean" ? body.numberOnFront : true,
+      numberPosition: body.numberPosition,
       name: body.name.toUpperCase() || "YOUR FULL NAME",
       logoText: body.logoText || "",
       logoTextSize: body.logoTextSize || 18,
+      logo: body.logo,
+      logoX: body.logoX,
+      logoY: body.logoY,
+      logoTextX: body.logoTextX,
+      logoTextY: body.logoTextY,
+      border: body.border,
     });
 
     const response = await transporter.sendMail({
-      from: process.env.EMAIL,
-      to: body.email || process.env.EMAIL,
-      subject: `uCard Elite New Order`,
+      from: "rromikas@gmail.com",
+      to: body.email || "rromikas@gmail.com",
+      subject: `Elite cards files`,
       attachments: [
         { filename: "card-front.svg", content: front },
         { filename: "card-back.svg", content: back },
@@ -116,6 +170,7 @@ const handler = async (event, context) => {
       return { statusCode: 200, headers, body: JSON.stringify({ error: true }) };
     }
   } catch (error) {
+    console.log(error);
     return { statusCode: 200, headers, body: JSON.stringify({ error: error.toString() }) };
   }
 };

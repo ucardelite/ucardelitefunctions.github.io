@@ -1,6 +1,5 @@
 const nodemailer = require("nodemailer");
 const emailTemplate = require("./emailTemplate");
-const clientEmailTemplate = require("./clientEmailTemplate");
 var admin = require("firebase-admin");
 const TextToSVG = require("text-to-svg");
 const fs = require("fs");
@@ -14,25 +13,67 @@ const readSvg = (fileName) => {
 };
 
 const svgCardTemplate = async ({
-  provider = "mastercard",
-  numberOnFront = true,
+  provider = "visa",
+  numberPosition,
   name,
   logoText,
+  logoTextX,
+  logoTextY,
   logoTextSize,
+  logo,
+  logoX,
+  logoY,
+  border,
 }) => {
   const options = { x: 0, y: 0, fontSize: 4.79, anchor: "top", attributes: { fill: "black" } };
-
+  const scale = 5.557;
   const textToSVG = TextToSVG.loadSync(require.resolve("./Oswald-Regular.ttf"));
   const namePath = textToSVG.getPath(name, options);
   const fontSize = logoTextSize * 0.19;
   const customTextPath = textToSVG.getPath(logoText, { ...options, fontSize });
   const cardBackNoNumber = await readSvg("./card-back-withoutNR.svg");
   const cardBackWithNumber = await readSvg("./card-back-withNR.svg");
+  const borderVectorized = border
+    ? await fetch(`https://boiling-depths-34589.herokuapp.com/imageToSvg`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: border, color: 0 }),
+      }).then((x) => x.json())
+    : null;
+  let borderSvg;
+
+  if (borderVectorized) {
+    borderSvg = borderVectorized.svg;
+    borderSvg = borderSvg.replace(/width=\"(.*?)\"/, `width="83.6"`);
+    borderSvg = borderSvg.replace(/height=\"(.*?)\"/, `height="51.98"`);
+    borderSvg = borderSvg.replace(
+      "<svg",
+      `<svg preserveAspectRatio="none" viewBox="0 0 ${borderVectorized.width} ${borderVectorized.height}"`
+    );
+  }
 
   return {
     front: `<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" width="85.6mm" height="53.98mm" viewBox="0 0 85.6 53.98" fill="white">
   <rect x="0" y="0" width="85.6" height="53.98" stroke="black" stroke-width="0.3" rx="3.5"></rect>
-  <g id="logoText" transform="translate(2,2)">${customTextPath}</g>
+  ${
+    customTextPath
+      ? `<g id="logoText" transform="translate(${logoTextX / scale},${logoTextY / scale})">
+        ${customTextPath}
+      </g>`
+      : null
+  }
+
+  ${
+    logo
+      ? `<g
+        transform="translate(${logoX / scale}, ${logoY / scale})"
+      >
+        ${logo}
+      </g>`
+      : null
+  }
+
+  ${borderSvg ? `<g id="border" transform="translate(1, 1)">${borderSvg}</g>` : null}
   <g id="lust" transform="translate(8,14)">
       <path d="M11.3059 0.186279H1.93797C1.37339 0.186279 0.91571 0.667514 0.91571 1.26115V6.96913C0.91571 7.56277 1.37339 8.044 1.93797 8.044H11.3059C11.8704 8.044 12.3281 7.56277 12.3281 6.96913V1.26115C12.3281 0.667514 11.8704 0.186279 11.3059 0.186279Z" stroke="black" stroke-width="0.165"/>
   </g>
@@ -70,32 +111,37 @@ const svgCardTemplate = async ({
       : ""
   }
 </svg>`,
-    back: numberOnFront ? cardBackNoNumber : cardBackWithNumber,
+    back:
+      numberPosition === "front"
+        ? cardBackNoNumber
+        : numberPosition === "back"
+        ? cardBackWithNumber
+        : "<svg></svg>",
   };
 };
 
 const firebaseConfig = {
-  "type": process.env["firebase_type"],
-  "project_id": process.env["firebase_project_id"],
-  "private_key_id": process.env["firebase_private_key_id"],
-  "private_key": process.env["firebase_private_key"],
-  "client_email": process.env["firebase_client_email"],
-  "client_id": process.env["firebase_client_id"],
-  "auth_uri": process.env["firebase_auth_uri"],
-  "token_uri": process.env["firebase_token_uri"],
-  "auth_provider_x509_cert_url": process.env["firebase_auth_provider_x509_cert_url"],
-  "client_x509_cert_url": process.env["firebase_client_x509_cert_url"]
-}
+  type: process.env["firebase_type"],
+  project_id: process.env["firebase_project_id"],
+  private_key_id: process.env["firebase_key_id"],
+  private_key: process.env["firebase_private_key"],
+  client_email: process.env["firebase_client_email"],
+  client_id: process.env["firebase_client_id"],
+  auth_uri: process.env["firebase_auth_uri"],
+  token_uri: process.env["firebase_token_uri"],
+  auth_provider_x509_cert_url: process.env["firebase_auth_provider_x509_cert_url"],
+  client_x509_cert_url: process.env["firebase_client_x509_cert_url"],
+};
 
 if (admin.apps.length === 0) {
   admin.initializeApp({
     credential: admin.credential.cert(firebaseConfig),
-    databaseURL: "https://ucardelite-a9084-default-rtdb.firebaseio.com",
+    databaseURL: "https://cards-12073-default-rtdb.firebaseio.com",
   });
 }
 const database = admin.database();
 
-const sendEmail = async (data, receiver) => {
+const sendEmailToAdmin = async (data) => {
   let transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -106,20 +152,17 @@ const sendEmail = async (data, receiver) => {
 
   const { front, back } = await svgCardTemplate({
     provider: data.provider || "visa",
-    numberOnFront: typeof data.numberOnFront === "boolean" ? data.numberOnFront : true,
-    name: data.name ? data.name.toUpperCase() : "YOUR FULL NAME",
+    numberPosition: data.numberPosition,
+    name: data.name?.toUpperCase() || "YOUR FULL NAME",
     logoText: data.logoText || "",
     logoTextSize: data.logoTextSize || 18,
   });
 
   const response = await transporter.sendMail({
     from: process.env.EMAIL,
-    to: receiver === "admin" ? "sojusesu@gmail.com" : data.email_address,
-    subject:
-      receiver === "admin"
-        ? `New order from uCard Elite customer`
-        : `Thank you for your order! - uCard Elite team`,
-    html: emailTemplate(data, receiver),
+    to: "sojusesu@gmail.com",
+    subject: `New order from uCard Elite customer`,
+    html: emailTemplate(data),
     attachments: [
       { filename: "card-front.svg", content: front },
       { filename: "card-back.svg", content: back },
@@ -137,15 +180,8 @@ const handler = async (event, context) => {
   };
 
   try {
-    let body;
-    try {
-      body = JSON.parse(event.body);
-    } catch (er) {
-      //when receiving request from payfast after payment
-      body = event.body
-        .split("&")
-        .reduce((a, b) => ({ ...a, [b.split("=")[0]]: b.split("=")[1] }), {});
-    }
+    const body = JSON.parse(event.body);
+    console.log("Body", body);
 
     await (() => {
       return new Promise((resolve, reject) => {
@@ -155,7 +191,6 @@ const handler = async (event, context) => {
               .ref()
               .update({ [body.m_payment_id]: null })
               .then(() => resolve(true));
-            break;
           case "COMPLETE":
             database
               .ref("orders/" + body.m_payment_id)
@@ -163,16 +198,14 @@ const handler = async (event, context) => {
               .then(async (snap) => {
                 if (snap) {
                   const order = snap.val();
-                  const re1 = await sendEmail(order, "admin");
-                  const res2 = await sendEmail(order, "client");
-                  resolve(true);
+                  const response = await sendEmailToAdmin(order);
                 }
               })
               .catch((er) => {
                 console.log(er);
                 resolve(true);
               });
-            break;
+
           default:
             resolve(true);
         }
