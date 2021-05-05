@@ -128,6 +128,9 @@ const handler = async (event, context) => {
   try {
     const body = JSON.parse(event.body);
 
+    const { logo, ...rest } = body;
+    console.log(rest);
+
     let transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
